@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Видео Сплиттер - Разделение видео на фрагменты</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .dropzone {
+            border: 2px dashed #3b82f6;
+            transition: all 0.3s;
+        }
+        .dropzone.active {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        .video-thumbnail {
+            transition: all 0.2s;
+        }
+        .video-thumbnail:hover {
+            transform: scale(1.03);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .progress-bar {
+            height: 6px;
+            transition: width 0.3s;
+        }
+        .clip-item {
+            transition: all 0.2s;
+        }
+        .clip-item:hover {
+            transform: translateY(-2px);
+        }
+        @media (max-width: 640px) {
+            .controls {
+                flex-direction: column;
+            }
+            .clip-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-600 mb-2">Видео Сплиттер</h1>
+            <p class="text-gray-600 max-w-2xl mx-auto">Загружайте несколько видео и автоматически получайте фрагменты по 0.7 секунд каждого видео</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden p-6 mb-8">
+            <!-- Upload Section -->
+            <div id="upload-section" class="mb-10">
+                <div id="dropzone" class="dropzone rounded-lg p-8 text-center cursor-pointer mb-4">
+                    <div class="flex flex-col items-center justify-center space-y-3">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-blue-500"></i>
+                        <h3 class="text-xl font-semibold text-gray-700">Перетащите видео сюда</h3>
+                        <p class="text-gray-500">или</p>
+                        <label for="file-input" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer">
+                            Выберите файлы
+                        </label>
+                        <input id="file-input" type="file" multiple accept="video/*" class="hidden">
+                    </div>
+                </div>
+                <p class="text-sm text-gray-500 text-center">Поддерживаются форматы: MP4, MOV, AVI, MKV, WEBM. Максимальный размер файла: 2GB</p>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progress-section" class="hidden mb-10">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-medium text-gray-700">Обработка видео...</h3>
+                    <span id="progress-text" class="text-sm text-blue-600">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="progress-bar bg-blue-600 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Video List -->
+            <div id="video-list" class="hidden mb-10">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Загруженные видео</h3>
+                <div id="videos-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
+
+            <!-- Controls -->
+            <div id="controls" class="hidden flex-wrap gap-4 justify-between items-center mb-8 controls">
+                <div class="flex items-center space-x-4">
+                    <button id="process-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center">
+                        <i class="fas fa-cut mr-2"></i> Разделить видео
+                    </button>
+                    <button id="download-all-btn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center hidden">
+                        <i class="fas fa-download mr-2"></i> Скачать все
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-700">Длина фрагмента:</span>
+                    <div class="relative">
+                        <input type="number" id="clip-duration" value="0.7" step="0.1" min="0.1" max="10" class="w-20 px-3 py-1 border border-gray-300 rounded-lg text-center">
+                        <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">сек</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results-section" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Результаты</h3>
+                    <div id="clip-count" class="text-sm text-gray-600">0 фрагментов</div>
+                </div>
+                <div id="clips-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 clip-grid"></div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden p-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Как это работает?</h3>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-upload text-blue-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">1. Загрузите видео</h4>
+                    <p class="text-gray-600">Перетащите или выберите несколько видеофайлов любого формата</p>
+                </div>
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-cut text-green-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">2. Разделите на фрагменты</h4>
+                    <p class="text-gray-600">Нажмите кнопку "Разделить видео" для создания фрагментов по 0.7 секунд</p>
+                </div>
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-download text-purple-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">3. Скачайте результат</h4>
+                    <p class="text-gray-600">Скачайте все фрагменты одним архивом или выборочно</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const dropzone = document.getElementById('dropzone');
+            const fileInput = document.getElementById('file-input');
+            const videosContainer = document.getElementById('videos-container');
+            const clipsContainer = document.getElementById('clips-container');
+            const progressSection = document.getElementById('progress-section');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const videoListSection = document.getElementById('video-list');
+            const controlsSection = document.getElementById('controls');
+            const resultsSection = document.getElementById('results-section');
+            const processBtn = document.getElementById('process-btn');
+            const downloadAllBtn = document.getElementById('download-all-btn');
+            const clipDurationInput = document.getElementById('clip-duration');
+            const clipCount = document.getElementById('clip-count');
+            
+            // Variables
+            let videos = [];
+            let videoClips = [];
+            let isProcessing = false;
+
+            // Event Listeners
+            dropzone.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', handleFiles);
+            
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('active');
+            });
+            
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('active');
+            });
+            
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('active');
+                if (e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFiles({ target: fileInput });
+                }
+            });
+            
+            processBtn.addEventListener('click', processVideos);
+            downloadAllBtn.addEventListener('click', downloadAllClips);
+
+            // Functions
+            function handleFiles(e) {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                
+                // Filter only video files
+                const videoFiles = files.filter(file => file.type.startsWith('video/'));
+                
+                if (videoFiles.length === 0) {
+                    alert('Пожалуйста, выберите видеофайлы (MP4, MOV, AVI и т.д.)');
+                    return;
+                }
+                
+                videos = videoFiles;
+                displayVideos();
+            }
+            
+            function displayVideos() {
+                videosContainer.innerHTML = '';
+                
+                videos.forEach((video, index) => {
+                    const videoUrl = URL.createObjectURL(video);
+                    
+                    const videoCard = document.createElement('div');
+                    videoCard.className = 'bg-gray-50 rounded-lg overflow-hidden border border-gray-200 video-thumbnail';
+                    videoCard.innerHTML = `
+                        <div class="relative pt-[56.25%] bg-black">
+                            <video class="absolute top-0 left-0 w-full h-full object-contain" src="${videoUrl}" muted></video>
+                        </div>
+                        <div class="p-3">
+                            <h4 class="font-medium text-gray-800 truncate">${video.name}</h4>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-sm text-gray-600">${formatFileSize(video.size)}</span>
+                                <span class="text-sm text-gray-600">${index + 1}/${videos.length}</span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    videosContainer.appendChild(videoCard);
+                });
+                
+                videoListSection.classList.remove('hidden');
+                controlsSection.classList.remove('hidden');
+                resultsSection.classList.add('hidden');
+                
+                // Auto-play videos on hover
+                const videoElements = document.querySelectorAll('#videos-container video');
+                videoElements.forEach(video => {
+                    video.parentElement.addEventListener('mouseenter', () => video.play());
+                    video.parentElement.addEventListener('mouseleave', () => {
+                        video.pause();
+                        video.currentTime = 0;
+                    });
+                });
+            }
+            
+            async function processVideos() {
+                if (isProcessing) return;
+                isProcessing = true;
+                
+                const clipDuration = parseFloat(clipDurationInput.value) || 0.7;
+                if (clipDuration <= 0 || clipDuration > 10) {
+                    alert('Длина фрагмента должна быть между 0.1 и 10 секундами');
+                    isProcessing = false;
+                    return;
+                }
+                
+                processBtn.disabled = true;
+                processBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Обработка...';
+                progressSection.classList.remove('hidden');
+                clipsContainer.innerHTML = '';
+                videoClips = [];
+                
+                let processedVideos = 0;
+                const totalVideos = videos.length;
+                
+                for (const video of videos) {
+                    try {
+                        await processVideo(video, clipDuration);
+                        processedVideos++;
+                        
+                        // Update progress
+                        const progress = Math.round((processedVideos / totalVideos) * 100);
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `${progress}%`;
+                        
+                    } catch (error) {
+                        console.error('Error processing video:', error);
+                    }
+                }
+                
+                // Complete processing
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                
+                setTimeout(() => {
+                    progressSection.classList.add('hidden');
+                    processBtn.disabled = false;
+                    processBtn.innerHTML = '<i class="fas fa-cut mr-2"></i> Разделить видео';
+                    isProcessing = false;
+                    
+                    // Show results
+                    resultsSection.classList.remove('hidden');
+                    downloadAllBtn.classList.remove('hidden');
+                    clipCount.textContent = `${videoClips.length} фрагментов`;
+                    
+                    // Scroll to results
+                    resultsSection.scrollIntoView({ behavior: 'smooth' });
+                }, 500);
+            }
+            
+            async function processVideo(videoFile, clipDuration) {
+                return new Promise((resolve, reject) => {
+                    const videoUrl = URL.createObjectURL(videoFile);
+                    const videoElement = document.createElement('video');
+                    videoElement.src = videoUrl;
+                    
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        const duration = videoElement.duration;
+                        const clipCount = Math.floor(duration / clipDuration);
+                        
+                        // Create canvas for capturing frames
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                        
+                        let clipsCreated = 0;
+                        
+                        // Function to capture frame at specific time
+                        const captureFrame = (time) => {
+                            return new Promise((resolveFrame) => {
+                                videoElement.currentTime = time;
+                                
+                                const onSeeked = () => {
+                                    videoElement.removeEventListener('seeked', onSeeked);
+                                    
+                                    // Draw frame to canvas
+                                    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                                    
+                                    // Create clip object
+                                    const clipId = `${videoFile.name}-${time.toFixed(2)}`;
+                                    const clipThumbnail = canvas.toDataURL('image/jpeg');
+                                    
+                                    videoClips.push({
+                                        id: clipId,
+                                        videoName: videoFile.name,
+                                        time: time,
+                                        duration: clipDuration,
+                                        thumbnail: clipThumbnail,
+                                        videoUrl: videoUrl
+                                    });
+                                    
+                                    // Create clip element
+                                    createClipElement(clipId, videoFile.name, time, clipThumbnail);
+                                    
+                                    clipsCreated++;
+                                    if (clipsCreated === clipCount) {
+                                        resolve();
+                                    } else {
+                                        resolveFrame();
+                                    }
+                                };
+                                
+                                videoElement.addEventListener('seeked', onSeeked);
+                            });
+                        };
+                        
+                        // Capture frames at intervals
+                        const captureFrames = async () => {
+                            for (let i = 0; i < clipCount; i++) {
+                                const time = i * clipDuration;
+                                await captureFrame(time);
+                            }
+                        };
+                        
+                        captureFrames().catch(reject);
+                    });
+                    
+                    videoElement.addEventListener('error', reject);
+                });
+            }
+            
+            function createClipElement(id, videoName, time, thumbnail) {
+                const clipElement = document.createElement('div');
+                clipElement.className = 'bg-white rounded-lg overflow-hidden border border-gray-200 clip-item';
+                clipElement.innerHTML = `
+                    <div class="relative pt-[56.25%] bg-gray-100">
+                        <img src="${thumbnail}" class="absolute top-0 left-0 w-full h-full object-cover" alt="Clip thumbnail">
+                        <div class="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">
+                            ${time.toFixed(1)}s
+                        </div>
+                    </div>
+                    <div class="p-2">
+                        <h4 class="text-xs font-medium text-gray-800 truncate" title="${videoName}">${videoName}</h4>
+                        <div class="flex justify-between items-center mt-1">
+                            <button class="text-blue-600 hover:text-blue-800 text-xs" onclick="downloadClip('${id}')">
+                                <i class="fas fa-download mr-1"></i> Скачать
+                            </button>
+                            <button class="text-gray-600 hover:text-gray-800 text-xs" onclick="previewClip('${id}')">
+                                <i class="fas fa-eye mr-1"></i> Просмотр
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                clipsContainer.appendChild(clipElement);
+            }
+            
+            function downloadAllClips() {
+                if (videoClips.length === 0) return;
+                
+                // Create a ZIP file with all clips (simulated in this demo)
+                alert('В реальном приложении здесь бы создавался ZIP-архив со всеми фрагментами. В демо-версии вы можете скачать каждый фрагмент отдельно.');
+                
+                // In a real app, you would use a library like JSZip to create a zip file
+                // and then trigger download of all clips at once
+            }
+            
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+            
+            // Make functions available globally for buttons in clip elements
+            window.downloadClip = function(clipId) {
+                const clip = videoClips.find(c => c.id === clipId);
+                if (!clip) return;
+                
+                // In a real app, you would use FFmpeg or similar to extract the actual clip
+                // For demo purposes, we'll just show an alert
+                alert(`В реальном приложении здесь бы скачивался фрагмент видео ${clip.videoName} с ${clip.time.toFixed(1)}s до ${(clip.time + clip.duration).toFixed(1)}s`);
+            };
+            
+            window.previewClip = function(clipId) {
+                const clip = videoClips.find(c => c.id === clipId);
+                if (!clip) return;
+                
+                <!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Видео Сплиттер - Разделение видео на фрагменты</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .dropzone {
+            border: 2px dashed #3b82f6;
+            transition: all 0.3s;
+        }
+        .dropzone.active {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        .video-thumbnail {
+            transition: all 0.2s;
+        }
+        .video-thumbnail:hover {
+            transform: scale(1.03);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .progress-bar {
+            height: 6px;
+            transition: width 0.3s;
+        }
+        .clip-item {
+            transition: all 0.2s;
+        }
+        .clip-item:hover {
+            transform: translateY(-2px);
+        }
+        @media (max-width: 640px) {
+            .controls {
+                flex-direction: column;
+            }
+            .clip-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-600 mb-2">Видео Сплиттер</h1>
+            <p class="text-gray-600 max-w-2xl mx-auto">Загружайте несколько видео и автоматически получайте фрагменты по 0.7 секунд каждого видео</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden p-6 mb-8">
+            <!-- Upload Section -->
+            <div id="upload-section" class="mb-10">
+                <div id="dropzone" class="dropzone rounded-lg p-8 text-center cursor-pointer mb-4">
+                    <div class="flex flex-col items-center justify-center space-y-3">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-blue-500"></i>
+                        <h3 class="text-xl font-semibold text-gray-700">Перетащите видео сюда</h3>
+                        <p class="text-gray-500">или</p>
+                        <label for="file-input" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer">
+                            Выберите файлы
+                        </label>
+                        <input id="file-input" type="file" multiple accept="video/*" class="hidden">
+                    </div>
+                </div>
+                <p class="text-sm text-gray-500 text-center">Поддерживаются форматы: MP4, MOV, AVI, MKV, WEBM. Максимальный размер файла: 2GB</p>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progress-section" class="hidden mb-10">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-medium text-gray-700">Обработка видео...</h3>
+                    <span id="progress-text" class="text-sm text-blue-600">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="progress-bar bg-blue-600 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Video List -->
+            <div id="video-list" class="hidden mb-10">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Загруженные видео</h3>
+                <div id="videos-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
+
+            <!-- Controls -->
+            <div id="controls" class="hidden flex-wrap gap-4 justify-between items-center mb-8 controls">
+                <div class="flex items-center space-x-4">
+                    <button id="process-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center">
+                        <i class="fas fa-cut mr-2"></i> Разделить видео
+                    </button>
+                    <button id="download-all-btn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center hidden">
+                        <i class="fas fa-download mr-2"></i> Скачать все
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-700">Длина фрагмента:</span>
+                    <div class="relative">
+                        <input type="number" id="clip-duration" value="0.7" step="0.1" min="0.1" max="10" class="w-20 px-3 py-1 border border-gray-300 rounded-lg text-center">
+                        <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">сек</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results-section" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Результаты</h3>
+                    <div id="clip-count" class="text-sm text-gray-600">0 фрагментов</div>
+                </div>
+                <div id="clips-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 clip-grid"></div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden p-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Как это работает?</h3>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-upload text-blue-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">1. Загрузите видео</h4>
+                    <p class="text-gray-600">Перетащите или выберите несколько видеофайлов любого формата</p>
+                </div>
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-cut text-green-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">2. Разделите на фрагменты</h4>
+                    <p class="text-gray-600">Нажмите кнопку "Разделить видео" для создания фрагментов по 0.7 секунд</p>
+                </div>
+                <div class="flex flex-col items-center text-center p-4">
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="fas fa-download text-purple-600"></i>
+                    </div>
+                    <h4 class="font-medium text-gray-800 mb-2">3. Скачайте результат</h4>
+                    <p class="text-gray-600">Скачайте все фрагменты одним архивом или выборочно</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const dropzone = document.getElementById('dropzone');
+            const fileInput = document.getElementById('file-input');
+            const videosContainer = document.getElementById('videos-container');
+            const clipsContainer = document.getElementById('clips-container');
+            const progressSection = document.getElementById('progress-section');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const videoListSection = document.getElementById('video-list');
+            const controlsSection = document.getElementById('controls');
+            const resultsSection = document.getElementById('results-section');
+            const processBtn = document.getElementById('process-btn');
+            const downloadAllBtn = document.getElementById('download-all-btn');
+            const clipDurationInput = document.getElementById('clip-duration');
+            const clipCount = document.getElementById('clip-count');
+            
+            // Variables
+            let videos = [];
+            let videoClips = [];
+            let isProcessing = false;
+
+            // Event Listeners
+            dropzone.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', handleFiles);
+            
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('active');
+            });
+            
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('active');
+            });
+            
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('active');
+                if (e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFiles({ target: fileInput });
+                }
+            });
+            
+            processBtn.addEventListener('click', processVideos);
+            downloadAllBtn.addEventListener('click', downloadAllClips);
+
+            // Functions
+            function handleFiles(e) {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                
+                // Filter only video files
+                const videoFiles = files.filter(file => file.type.startsWith('video/'));
+                
+                if (videoFiles.length === 0) {
+                    alert('Пожалуйста, выберите видеофайлы (MP4, MOV, AVI и т.д.)');
+                    return;
+                }
+                
+                videos = videoFiles;
+                displayVideos();
+            }
+            
+            function displayVideos() {
+                videosContainer.innerHTML = '';
+                
+                videos.forEach((video, index) => {
+                    const videoUrl = URL.createObjectURL(video);
+                    
+                    const videoCard = document.createElement('div');
+                    videoCard.className = 'bg-gray-50 rounded-lg overflow-hidden border border-gray-200 video-thumbnail';
+                    videoCard.innerHTML = `
+                        <div class="relative pt-[56.25%] bg-black">
+                            <video class="absolute top-0 left-0 w-full h-full object-contain" src="${videoUrl}" muted></video>
+                        </div>
+                        <div class="p-3">
+                            <h4 class="font-medium text-gray-800 truncate">${video.name}</h4>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-sm text-gray-600">${formatFileSize(video.size)}</span>
+                                <span class="text-sm text-gray-600">${index + 1}/${videos.length}</span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    videosContainer.appendChild(videoCard);
+                });
+                
+                videoListSection.classList.remove('hidden');
+                controlsSection.classList.remove('hidden');
+                resultsSection.classList.add('hidden');
+                
+                // Auto-play videos on hover
+                const videoElements = document.querySelectorAll('#videos-container video');
+                videoElements.forEach(video => {
+                    video.parentElement.addEventListener('mouseenter', () => video.play());
+                    video.parentElement.addEventListener('mouseleave', () => {
+                        video.pause();
+                        video.currentTime = 0;
+                    });
+                });
+            }
+            
+            async function processVideos() {
+                if (isProcessing) return;
+                isProcessing = true;
+                
+                const clipDuration = parseFloat(clipDurationInput.value) || 0.7;
+                if (clipDuration <= 0 || clipDuration > 10) {
+                    alert('Длина фрагмента должна быть между 0.1 и 10 секундами');
+                    isProcessing = false;
+                    return;
+                }
+                
+                processBtn.disabled = true;
+                processBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Обработка...';
+                progressSection.classList.remove('hidden');
+                clipsContainer.innerHTML = '';
+                videoClips = [];
+                
+                let processedVideos = 0;
+                const totalVideos = videos.length;
+                
+                for (const video of videos) {
+                    try {
+                        await processVideo(video, clipDuration);
+                        processedVideos++;
+                        
+                        // Update progress
+                        const progress = Math.round((processedVideos / totalVideos) * 100);
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `${progress}%`;
+                        
+                    } catch (error) {
+                        console.error('Error processing video:', error);
+                    }
+                }
+                
+                // Complete processing
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                
+                setTimeout(() => {
+                    progressSection.classList.add('hidden');
+                    processBtn.disabled = false;
+                    processBtn.innerHTML = '<i class="fas fa-cut mr-2"></i> Разделить видео';
+                    isProcessing = false;
+                    
+                    // Show results
+                    resultsSection.classList.remove('hidden');
+                    downloadAllBtn.classList.remove('hidden');
+                    clipCount.textContent = `${videoClips.length} фрагментов`;
+                    
+                    // Scroll to results
+                    resultsSection.scrollIntoView({ behavior: 'smooth' });
+                }, 500);
+            }
+            
+            async function processVideo(videoFile, clipDuration) {
+                return new Promise((resolve, reject) => {
+                    const videoUrl = URL.createObjectURL(videoFile);
+                    const videoElement = document.createElement('video');
+                    videoElement.src = videoUrl;
+                    
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        const duration = videoElement.duration;
+                        const clipCount = Math.floor(duration / clipDuration);
+                        
+                        // Create canvas for capturing frames
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                        
+                        let clipsCreated = 0;
+                        
+                        // Function to capture frame at specific time
+                        const captureFrame = (time) => {
+                            return new Promise((resolveFrame) => {
+                                videoElement.currentTime = time;
+                                
+                                const onSeeked = () => {
+                                    videoElement.removeEventListener('seeked', onSeeked);
+                                    
+                                    // Draw frame to canvas
+                                    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                                    
+                                    // Create clip object
+                                    const clipId = `${videoFile.name}-${time.toFixed(2)}`;
+                                    const clipThumbnail = canvas.toDataURL('image/jpeg');
+                                    
+                                    videoClips.push({
+                                        id: clipId,
+                                        videoName: videoFile.name,
+                                        time: time,
+                                        duration: clipDuration,
+                                        thumbnail: clipThumbnail,
+                                        videoUrl: videoUrl
+                                    });
+                                    
+                                    // Create clip element
+                                    createClipElement(clipId, videoFile.name, time, clipThumbnail);
+                                    
+                                    clipsCreated++;
+                                    if (clipsCreated === clipCount) {
+                                        resolve();
+                                    } else {
+                                        resolveFrame();
+                                    }
+                                };
+                                
+                                videoElement.addEventListener('seeked', onSeeked);
+                            });
+                        };
+                        
+                        // Capture frames at intervals
+                        const captureFrames = async () => {
+                            for (let i = 0; i < clipCount; i++) {
+                                const time = i * clipDuration;
+                                await captureFrame(time);
+                            }
+                        };
+                        
+                        captureFrames().catch(reject);
+                    });
+                    
+                    videoElement.addEventListener('error', reject);
+                });
+            }
+            
+            function createClipElement(id, videoName, time, thumbnail) {
+                const clipElement = document.createElement('div');
+                clipElement.className = 'bg-white rounded-lg overflow-hidden border border-gray-200 clip-item';
+                clipElement.innerHTML = `
+                    <div class="relative pt-[56.25%] bg-gray-100">
+                        <img src="${thumbnail}" class="absolute top-0 left-0 w-full h-full object-cover" alt="Clip thumbnail">
+                        <div class="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded">
+                            ${time.toFixed(1)}s
+                        </div>
+                    </div>
+                    <div class="p-2">
+                        <h4 class="text-xs font-medium text-gray-800 truncate" title="${videoName}">${videoName}</h4>
+                        <div class="flex justify-between items-center mt-1">
+                            <button class="text-blue-600 hover:text-blue-800 text-xs" onclick="downloadClip('${id}')">
+                                <i class="fas fa-download mr-1"></i> Скачать
+                            </button>
+                            <button class="text-gray-600 hover:text-gray-800 text-xs" onclick="previewClip('${id}')">
+                                <i class="fas fa-eye mr-1"></i> Просмотр
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                clipsContainer.appendChild(clipElement);
+            }
+            
+            function downloadAllClips() {
+                if (videoClips.length === 0) return;
+                
+                // Create a ZIP file with all clips (simulated in this demo)
+                alert('В реальном приложении здесь бы создавался ZIP-архив со всеми фрагментами. В демо-версии вы можете скачать каждый фрагмент отдельно.');
+                
+                // In a real app, you would use a library like JSZip to create a zip file
+                // and then trigger download of all clips at once
+            }
+            
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+            
+            // Make functions available globally for buttons in clip elements
+            window.downloadClip = function(clipId) {
+                const clip = videoClips.find(c => c.id === clipId);
+                if (!clip) return;
+                
+                // In a real app, you would use FFmpeg or similar to extract the actual clip
+                // For demo purposes, we'll just show an alert
+                alert(`В реальном приложении здесь бы скачивался фрагмент видео ${clip.videoName} с ${clip.time.toFixed(1)}s до ${(clip.time + clip.duration).toFixed(1)}s`);
+            };
+            
+            window.previewClip = function(clipId) {
+                const clip = videoClips.find(c => c.id === clipId);
+                if (!clip) return;
+                
+                // Create preview modal
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg overflow-hidden w-full max-w-2xl">
+                        <div class="relative pt-[56.25%] bg-black">
+                            <video controls autoplay class="absolute top-0 left-0 w-full h-full" src="${clip.videoUrl}">
+                                <source src="${clip.videoUrl}" type="video/mp4">
+                            </video>
+                            <button class="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-opacity-70" onclick="this.closest('div.fixed').remove()">
+                                <i class="fas fa-times"></i>
+                            </button> 
+                        </div>
+                        <div class="p-4">
+                            <h3 class="font-medium text-gray-800">${clip.videoName}</h3>
+                            <p class="text-gray-600 text-sm mt-1">Фрагмент: ${clip.time.toFixed(1)}s - ${(clip.time + clip.duration).toFixed(1)}s</p>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                // Seek to the clip start time
+                const video = modal.querySelector('video');
+                video.addEventListener('loadedmetadata', () => {
+                    video.currentTime = clip.time;
+                });
+            };
+        });
+    </script>
+</body>
+</html>/ Create preview modal
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg overflow-hidden w-full max-w-2xl">
+                        <div class="relative pt-[56.25%] bg-black">
+                            <video controls autoplay class="absolute top-0 left-0 w-full h-full" src="${clip.videoUrl}">
+                                <source src="${clip.videoUrl}" type="video/mp4">
+                            </video>
+                            <button class="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-opacity-70" onclick="this.closest('div.fixed').remove()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="p-4">
+                            <h3 class="font-medium text-gray-800">${clip.videoName}</h3>
+                            <p class="text-gray-600 text-sm mt-1">Фрагмент: ${clip.time.toFixed(1)}s - ${(clip.time + clip.duration).toFixed(1)}s</p>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                // Seek to the clip start time
+                const video = modal.querySelector('video');
+                video.addEventListener('loadedmetadata', () => {
+                    video.currentTime = clip.time;
+                });
+            };
+        });
+    </script>
+</body>
+</html>
